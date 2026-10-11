@@ -1,0 +1,20 @@
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+# CDK
+infra/cdk.out/
+infra/cdk.context.json
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+# env / secrets
+.env
+.env.*
+!.env.example
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
