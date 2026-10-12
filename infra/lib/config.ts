@@ -10,6 +10,29 @@ export interface InferenceProfileConfig {
   readonly label?: string;
 }
 
+export interface Route53SenderConfig {
+  /** Public hosted zone in the deploy account. Its apex domain becomes the sender domain. */
+  readonly hostedZoneId: string;
+  readonly zoneName: string;
+  /** Publish `_dmarc` (p=none). Default true; set false if the domain already has DMARC. */
+  readonly createDmarcRecord?: boolean;
+}
+
+/**
+ * Optional: send Cognito email through Amazon SES instead of Cognito's built-in sender
+ * (which is capped at 50 messages/day per account). Either give an already-verified identity
+ * (`fromEmail` + `verifiedDomain`), or `route53` to have the identity created by CDK.
+ */
+export interface SesConfig {
+  readonly fromEmail: string;
+  readonly fromName?: string;
+  /** Region of the SES identity. Defaults to the app region. */
+  readonly sesRegion?: string;
+  /** Set when fromEmail is on a verified domain identity rather than an address identity. */
+  readonly verifiedDomain?: string;
+  readonly route53?: Route53SenderConfig;
+}
+
 export interface PortalConfig {
   readonly stackName: string;
   readonly allowedDomains: string[];
@@ -31,6 +54,8 @@ export interface PortalConfig {
   /** With allowAllModels: only these providers (model ID prefix, e.g. "anthropic"). Empty = all. */
   readonly allowedProviders: string[];
   readonly alarmEmail?: string;
+  /** Omit to use Cognito's built-in email (50/day limit). */
+  readonly ses?: SesConfig;
   readonly monthlyBudgetUsd?: number;
   readonly removalPolicy: "destroy" | "retain";
   /** IPv4 CIDRs allowed to open the portal and call its API. Empty = no restriction. */
@@ -116,6 +141,24 @@ export function validateConfig(raw: unknown): PortalConfig {
 
   if (c.alarmEmail && String(c.alarmEmail).includes("REPLACE_")) errors.push("alarmEmail: replace the placeholder");
 
+  let ses: SesConfig | undefined;
+  if (c.ses !== undefined && c.ses !== null) {
+    const raw = c.ses as Partial<SesConfig>;
+    const r53 = raw.route53;
+    if (r53 && (!/^Z[A-Z0-9]+$/.test(String(r53.hostedZoneId)) || !DOMAIN_RE.test(String(r53.zoneName)))) {
+      errors.push("ses.route53: hostedZoneId (Z...) and zoneName (domain) are required");
+    }
+    const fromEmail = raw.fromEmail ?? (r53 ? `no-reply@${r53.zoneName}` : undefined);
+    if (!fromEmail || !String(fromEmail).includes("@")) errors.push("ses.fromEmail: required (or set ses.route53)");
+    if (raw.sesRegion && !REGION_RE.test(raw.sesRegion)) errors.push("ses.sesRegion: invalid region");
+    if (JSON.stringify(raw).includes("REPLACE_")) errors.push("ses: replace the placeholder sender/domain");
+    ses = {
+      ...raw,
+      fromEmail: String(fromEmail),
+      verifiedDomain: raw.verifiedDomain ?? r53?.zoneName,
+    };
+  }
+
   const removalPolicy = (c.removalPolicy ?? "destroy") as PortalConfig["removalPolicy"];
   if (removalPolicy !== "destroy" && removalPolicy !== "retain") {
     errors.push('removalPolicy: must be "destroy" or "retain"');
@@ -178,6 +221,7 @@ export function validateConfig(raw: unknown): PortalConfig {
     allowAllModels,
     allowedProviders,
     alarmEmail: c.alarmEmail ? String(c.alarmEmail) : undefined,
+    ses,
     monthlyBudgetUsd,
     removalPolicy,
     issueCooldownSeconds,

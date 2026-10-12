@@ -90,6 +90,7 @@ cp infra/portal.config.example.json infra/portal.config.json   # Git 管理外
 | `monthlyBudgetUsd` | なし | AWS Budgets の月額予算（通知のみ。利用は止まりません） |
 | `removalPolicy` | `destroy` | `retain` にするとテーブル・ユーザープール等を削除時に残す |
 | `issueCooldownSeconds` | 10 | 同一ユーザーの発行試行の最小間隔 |
+| `ses` | なし | Cognito のメールを SES で送る（下記「SES で送信する」）。`fromEmail`/`fromName`/`sesRegion`/`verifiedDomain`、または `route53: { hostedZoneId, zoneName }` |
 | `portalAllowedCidrs` | [] | ポータル（画面と API）にアクセスできる IPv4 CIDR。空なら制限なし |
 | `keyAllowedCidrs` | [] | 発行したキーで Bedrock を呼べる送信元 CIDR（IPv4/IPv6）。空なら制限なし |
 
@@ -114,7 +115,7 @@ make deploy                     # スタック名を変えた場合は STACK=<st
 
 管理者が参加者を招待することもできます。招待すると、Cognito から初期パスワード付きの招待メールが届きます（有効期限 7 日）。参加者は初回ログイン時に自分のパスワード（12 文字以上、英大文字・英小文字・数字を含む）を設定します。許可ドメイン外のアドレスは登録できません。招待メールにはポータルの URL が入らないので、URL は別途案内してください。
 
-**メール送信の上限:** SES を使わず Cognito 既定のメール送信を使うため、送信数には AWS アカウントあたり 1 日の上限があります（50 通、引き上げ不可。招待とパスワード再設定の両方が対象）。参加者が多い場合は日を分けて招待してください。初期パスワードが期限切れになった人には `--resend` で再送します。
+**メール送信の上限:** 既定では Cognito 組み込みのメール送信を使うため、送信数には AWS アカウントあたり 1 日 50 通の上限があります（引き上げ不可。登録確認・招待・パスワード再設定のすべてが対象）。参加者が多い場合は、下記の「SES で送信する（オプション）」を設定するか、日を分けて招待してください。初期パスワードが期限切れになった人には `--resend` で再送します。
 
 ```bash
 cd backend
@@ -149,6 +150,34 @@ unset AWS_BEARER_TOKEN_BEDROCK
 ```
 
 IAM は結果整合性のため、発行直後は数十秒ほど推論が失敗することがあります。
+
+## SES で送信する（オプション）
+
+Cognito のメールを Amazon SES 経由にすると、1 日 50 通の上限がなくなります（SES の本番アクセス承認後は 1 日 5 万通から）。設定ファイルに `ses` を追加して再デプロイします。省略時は Cognito 組み込みの送信のままです。
+
+**A. Route 53 のドメインを使う（自動）**
+
+```json
+"ses": { "route53": { "hostedZoneId": "Z0123456789ABC", "zoneName": "poc-mail.example.com" } }
+```
+
+1. `make deploy-ses` で SES 用スタックを先にデプロイします（DKIM・MAIL FROM・DMARC のレコードを Route 53 に自動作成）。送信元は `no-reply@<zoneName>` になります
+2. 検証完了（通常は数分）を待ちます。未検証のまま本体をデプロイすると Cognito の設定でエラーになります
+   ```bash
+   aws sesv2 get-email-identity --email-identity <zoneName> --region <app-region> \
+     --query '{verified:VerifiedForSendingStatus,dkim:DkimAttributes.Status}'
+   ```
+3. `make deploy`
+
+**B. 検証済みの SES ID を使う**
+
+```json
+"ses": { "fromEmail": "no-reply@example.com", "fromName": "Bedrock PoC Portal", "verifiedDomain": "example.com" }
+```
+
+SES コンソールでドメイン（またはアドレス）を検証済みであることが前提です。`sesRegion` でアプリと別リージョンの ID も指定できます。
+
+**共通:** SES のサンドボックスでは検証済みの宛先にしか送れないため、本番アクセスの申請が必要です。費用は送信量に応じた SES の料金です。
 
 ## フォント
 
@@ -235,6 +264,7 @@ uv run python ../scripts/activate_cost_tag.py --profile <payer-profile> --apply 
 - Amazon Bedrock（推論トークン。最大の費用要因。**Budgets は通知のみで停止しない**）
 - AWS Cost Explorer API（利用料表示のための取得。1 リクエストごとに課金。キャッシュで数回/日に抑制）
 - Amazon Cognito（Lite プランの月間アクティブユーザー）
+- Amazon SES（`ses` を設定した場合の送信通数）
 - CloudFront（リクエスト・転送量）、S3（保存・リクエスト）
 - API Gateway HTTP API（リクエスト）、Lambda（実行）
 - DynamoDB（オンデマンド読み書き、PITR）
@@ -253,6 +283,7 @@ uv run python ../scripts/portal_admin.py disable-issuance --table <TableName> --
 uv run python ../scripts/cleanup.py --deactivate-only --apply --expected-account <id>                  # 3. 全キーを無効化
 uv run python ../scripts/cleanup.py --apply --expected-account <id>                                    # 4. キー削除・ユーザー削除
 cd .. && make destroy                                                                                  # 5. スタック削除
+# ses.route53 を使った場合は SES 用スタックも: cd infra && npx cdk destroy <stackName>-SesIdentity -c config=portal.config.json
 ```
 
 - 想定外のアクセスキーやパスワード等が付いたユーザーは削除せずに報告します

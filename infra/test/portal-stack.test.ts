@@ -4,6 +4,7 @@ import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 import { validateConfig } from "../lib/config.js";
 import { PortalStack } from "../lib/portal-stack.js";
+import { SesIdentityStack } from "../lib/ses-stack.js";
 
 const baseConfig = {
   allowedDomains: ["company.co.jp"],
@@ -389,5 +390,47 @@ describe("restrictRegion: false", () => {
   it("defaults to restricting the region", () => {
     expect(validateConfig(baseConfig).restrictRegion).toBe(true);
     expect(JSON.stringify(template.toJSON())).toContain("aws:RequestedRegion");
+  });
+});
+
+describe("optional SES email", () => {
+  it("uses Cognito's built-in sender when ses is omitted", () => {
+    template.hasResourceProperties("AWS::Cognito::UserPool", {
+      EmailConfiguration: Match.objectLike({ EmailSendingAccount: "COGNITO_DEFAULT" }),
+    });
+  });
+  it("switches the user pool to SES with a verified domain", () => {
+    const t = synth({ ses: { fromEmail: "no-reply@mail.example.com", verifiedDomain: "mail.example.com", fromName: "Portal" } });
+    t.hasResourceProperties("AWS::Cognito::UserPool", {
+      EmailConfiguration: Match.objectLike({
+        EmailSendingAccount: "DEVELOPER",
+        From: "Portal <no-reply@mail.example.com>",
+        SourceArn: Match.objectLike({ "Fn::Join": Match.anyValue() }),
+      }),
+    });
+  });
+  it("route53 mode defaults the sender and validates the zone", () => {
+    const c = validateConfig({ ...baseConfig, ses: { route53: { hostedZoneId: "Z0123456789ABC", zoneName: "poc-mail.example" } } });
+    expect(c.ses?.fromEmail).toBe("no-reply@poc-mail.example");
+    expect(c.ses?.verifiedDomain).toBe("poc-mail.example");
+    expect(() => validateConfig({ ...baseConfig, ses: { route53: { hostedZoneId: "nope", zoneName: "x" } } })).toThrow(/route53/);
+    expect(() => validateConfig({ ...baseConfig, ses: { fromEmail: "REPLACE_ME@x.example" } })).toThrow(/placeholder/);
+    expect(() => validateConfig({ ...baseConfig, ses: {} })).toThrow(/fromEmail/);
+  });
+  it("SES identity stack publishes DKIM, MAIL FROM and DMARC", () => {
+    const app = new App();
+    const stack = new SesIdentityStack(app, "Ses", {
+      hostedZoneId: "Z0123456789ABC",
+      zoneName: "poc-mail.example",
+      createDmarcRecord: true,
+      env: { account: "123456789012", region: "ap-northeast-1" },
+    });
+    const t = Template.fromStack(stack);
+    t.hasResourceProperties("AWS::SES::EmailIdentity", {
+      EmailIdentity: "poc-mail.example",
+      MailFromAttributes: Match.objectLike({ MailFromDomain: "mail.poc-mail.example" }),
+    });
+    t.hasResourceProperties("AWS::Route53::RecordSet", { Name: "_dmarc.poc-mail.example.", Type: "TXT" });
+    expect(Object.keys(t.findResources("AWS::Route53::RecordSet")).length).toBe(6); // 3 DKIM + MX + SPF + DMARC
   });
 });

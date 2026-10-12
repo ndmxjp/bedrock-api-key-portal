@@ -2,7 +2,7 @@
 CONFIG ?= portal.config.json
 STACK ?= BedrockApiKeyPortal
 
-.PHONY: install test lint requirements build synth diff deploy destroy cleanup-dry-run
+.PHONY: install test lint requirements build synth diff deploy-ses deploy destroy cleanup-dry-run
 
 install:
 	cd backend && uv sync
@@ -31,6 +31,10 @@ synth: build
 
 diff: build
 	cd infra && npx cdk diff --all -c config=$(CONFIG)
+
+# Only when ses.route53 is configured. Wait until the identity is verified before `make deploy`.
+deploy-ses:
+	cd infra && npx cdk deploy $(STACK)-SesIdentity -c config=$(CONFIG) -c skipFrontend=true
 
 deploy: build
 	cd infra && npx cdk deploy $(STACK) -c config=$(CONFIG)

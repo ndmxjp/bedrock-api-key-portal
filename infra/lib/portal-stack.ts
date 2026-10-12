@@ -158,7 +158,15 @@ export class PortalStack extends Stack {
       accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
       mfa: cognito.Mfa.OFF,
       // Cognito's built-in email (no SES). Limited daily volume: see README.
-      email: cognito.UserPoolEmail.withCognito(),
+      // Cognito's built-in sender is capped at 50 messages/day per account; SES lifts that.
+      email: config.ses
+        ? cognito.UserPoolEmail.withSES({
+            fromEmail: config.ses.fromEmail,
+            fromName: config.ses.fromName ?? "Bedrock PoC Portal",
+            sesRegion: config.ses.sesRegion,
+            sesVerifiedDomain: config.ses.verifiedDomain,
+          })
+        : cognito.UserPoolEmail.withCognito(),
       userInvitation: {
         emailSubject: "Bedrock PoC ポータルへの招待",
         emailBody:
