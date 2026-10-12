@@ -24,7 +24,9 @@ PT = 72
 def node(id, icon, label, x, y, size=58):
     lab = label.replace("\n", "<BR/>")
     return (f'{id} [layer="fg", shape=none, margin=0, label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="1">'
-            f'<TR><TD FIXEDSIZE="TRUE" WIDTH="{size}" HEIGHT="{size}"><IMG SRC="{I[icon]}"/></TD></TR>'
+            # The icon sits in its own nested table: a wide caption would otherwise stretch the cell (and the image).
+            f'<TR><TD><TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="0">'
+            f'<TR><TD PORT="icon" FIXEDSIZE="TRUE" WIDTH="{size}" HEIGHT="{size}"><IMG SCALE="TRUE" SRC="{I[icon]}"/></TD></TR></TABLE></TD></TR>'
             f'<TR><TD><FONT POINT-SIZE="9.5">{lab}</FONT></TD></TR></TABLE>>, pos="{x*PT},{y*PT}!"];')
 
 def box(id, label, x0, y0, x1, y1, fill="#fafbfd", color="#c3c8d3"):
@@ -67,12 +69,13 @@ def route(a, pts, b, label="", label_seg=-1, **kw):
         edge(u, v, label if i == label_seg else "", **k)
 
 # ---- layout (inches; y up). Row A (top) y=6.0, Row B y=3.9, Row C y=1.4
-N.append(box("acct", "AWS アカウント（ポータル）", 1.8, 0.1, 14.2, 7.5, fill="#f7f8fb", color="#9aa1b1"))
+N.append(box("acct", "AWS アカウント（ポータル）", 1.8, 0.1, 14.3, 7.5, fill="#f7f8fb", color="#9aa1b1"))
 N.append(box("c_edge", "配信・認証", 2.0, 3.0, 6.1, 7.1))
 N.append(box("c_api",  "API", 6.4, 3.0, 9.6, 7.1))
-N.append(box("c_ops",  "運用", 9.9, 3.0, 14.0, 7.1))
-N.append(box("c_iam",  "利用者ごとの IAM", 6.4, 0.3, 11.2, 2.7))
+N.append(box("c_ops",  "運用", 9.9, 4.9, 14.1, 7.1))
 N.append(box("c_dep",  "デプロイ時", 2.0, 0.3, 6.1, 2.7))
+N.append(box("c_iam",  "利用者ごとの IAM", 6.4, 0.3, 11.2, 2.7))
+N.append(box("c_br",   "推論", 11.5, 0.3, 14.1, 2.7))
 
 N.append(node("users","users","PoC 参加者 / 管理者\n許可ドメインのメール", 0.6, 6.0, 64))
 N.append(node("cf","cf","CloudFront\n同一オリジン / CSP\n任意で IP 制限", 3.0, 6.0))
@@ -81,15 +84,15 @@ N.append(node("s3","s3","S3\nSPA + フォント", 3.0, 3.9))
 N.append(node("apigw","apigw","HTTP API\nJWT authorizer", 7.1, 6.0))
 N.append(node("lambda","lambda","Lambda (Python)\n発行 / 失効 / 管理", 8.9, 6.0))
 N.append(node("ddb","ddb","DynamoDB\n状態・枠・設定・キャッシュ", 7.1, 3.9))
-N.append(node("ce","ce","Cost Explorer\n利用者別の利用料", 10.7, 6.0))
-N.append(node("cw","cw","CloudWatch\nアラーム", 12.0, 6.0))
-N.append(node("budgets","budgets","Budgets\n月額アラート", 13.3, 6.0))
+N.append(node("ce","ce","Cost Explorer\n利用者別の利用料", 10.8, 6.0))
+N.append(node("cw","cw","CloudWatch\nアラーム", 12.1, 6.0))
+N.append(node("budgets","budgets","Budgets\n月額アラート", 13.4, 6.0))
 N.append(node("iam","iam","IAM ユーザー\n/bedrock-poc/…", 7.3, 1.4))
 N.append(node("key","key","Bedrock API キー\n(service-specific credential)", 8.9, 1.4))
 N.append(node("policy","policy","顧客管理ポリシー\n= Permissions Boundary", 10.5, 1.4))
 N.append(node("agree","lambda","デプロイ時 Lambda\nモデル利用規約へ自動同意", 3.0, 1.4))
 N.append(node("mp","mp","AWS Marketplace\nモデル利用規約", 5.0, 1.4))
-N.append(node("bedrock","bedrock","Amazon Bedrock\n許可した提供元のモデル", 15.5, 1.4, 64))
+N.append(node("bedrock","bedrock","Amazon Bedrock\n許可した提供元のモデル", 12.8, 1.4, 64))
 
 edge("users","cf","HTTPS")
 route("users",[(0.6,5.05),(5.0,5.05)],"cognito","サインイン", label_seg=1, style="dashed", tailport="s", headport="s")
@@ -99,15 +102,15 @@ edge("cognito","apigw","", style="dashed"); text("ID トークン", 6.05, 6.18)
 edge("apigw","lambda","claims")
 edge("lambda","ddb","", dir="both", tailport="w", headport="n")
 edge("lambda","key","", tailport="s", headport="n"); text("CreateUser\nCreateServiceSpecificCredential\nAttachUserPolicy", 9.0, 4.9)
-edge("key","iam","", style="dotted", arrowhead="none")
+edge("key:icon:w","iam:icon:e","", style="dotted", arrowhead="none")
 route("iam",[(7.3,0.55),(10.5,0.55)],"policy","attach + boundary", label_seg=1, style="dotted", tailport="s", headport="s")
-edge("lambda","ce","", style="dashed"); text("GetCostAndUsage", 9.72, 6.2)
-route("lambda",[(8.9,6.85),(12.0,6.85)],"cw","アラーム", label_seg=1, style="dashed", tailport="n", headport="n")
+edge("lambda","ce","", style="dashed"); text("GetCostAndUsage", 9.75, 6.2)
+route("lambda",[(8.9,6.85),(12.1,6.85)],"cw","アラーム", label_seg=1, style="dashed", tailport="n", headport="n")
 edge("agree","mp","", style="dashed"); text("CreateFoundationModelAgreement", 4.0, 2.15)
-route("mp",[(5.0,-0.2),(15.5,-0.2)],"bedrock","規約同意", label_seg=1, style="dotted", tailport="s", headport="s")
-edge("policy","bedrock","推論のみ許可", style="dotted")
-route("users",[(0.6,-0.6),(15.5,-0.6)],"bedrock","発行された API キーで直接呼び出し（Bearer トークン）", label_seg=1,
-      color="#5a4bd1", fontcolor="#5a4bd1", penwidth="2.4", tailport="s", headport="s")
+route("mp",[(5.0,-0.2),(12.8,-0.2)],"bedrock","規約同意", label_seg=1, style="dotted", tailport="s", headport="s")
+edge("policy","bedrock","", style="dotted"); text("推論のみ許可", 11.65, 1.6)
+route("users",[(0.6,-0.6),(14.75,-0.6),(14.75,1.4)],"bedrock","発行された API キーで直接呼び出し（Bearer トークン）", label_seg=1,
+      color="#5a4bd1", fontcolor="#5a4bd1", penwidth="2.4", tailport="s", headport="e")
 
 dot = f'''digraph G {{
   graph [bgcolor="white", pad="0.4", dpi="160", splines="spline", overlap="true", fontname="{FONT}", layers="bg:fg"];
