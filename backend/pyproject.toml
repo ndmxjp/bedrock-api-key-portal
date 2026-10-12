@@ -1,0 +1,39 @@
+[project]
+name = "bedrock-portal-backend"
+version = "0.1.0"
+description = "Lambda backend for the Bedrock API Key Self-Service Portal (PoC)"
+requires-python = ">=3.14"
+dependencies = [
+  "boto3>=1.43.111",
+]
+
+[dependency-groups]
+dev = [
+  "moto[dynamodb,iam,cognitoidp]>=5.2.3",
+  "pytest>=9.1.1",
+  "ruff>=0.17.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/portal"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S", "SIM", "RUF"]
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106"]

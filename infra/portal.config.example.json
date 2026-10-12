@@ -1,0 +1,26 @@
+{
+  "stackName": "BedrockApiKeyPortal",
+  "allowedDomains": [
+    "example.com"
+  ],
+  "credentialAgeDays": 7,
+  "registrationCap": 10,
+  "bedrockRegion": "us-west-2",
+  "inferenceProfiles": [
+    {
+      "id": "us.REPLACE_ME",
+      "modelId": "REPLACE_ME",
+      "label": "Replace with an ID from: aws bedrock list-inference-profiles"
+    }
+  ],
+  "alarmEmail": "REPLACE_ME@example.com",
+  "monthlyBudgetUsd": 100,
+  "removalPolicy": "destroy",
+  "issueCooldownSeconds": 10,
+  "allowAllModels": false,
+  "portalAllowedCidrs": [],
+  "keyAllowedCidrs": [],
+  "maxCredentialAgeDays": 30,
+  "allowedProviders": [],
+  "restrictRegion": true
+}
