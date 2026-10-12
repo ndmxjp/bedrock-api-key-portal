@@ -10,7 +10,7 @@ from botocore.exceptions import ClientError
 from portal.claims import Identity
 from portal.config import UNLIMITED, Settings, age_within
 from portal.costs import CostReporter, CostSnapshot
-from portal.domain import is_allowed_email, normalize_email
+from portal.domain import InvalidEmail, is_allowed_email, normalize_email
 from portal.errors import ApiError
 from portal.issuer import IamUserConflict, Issuer
 from portal.log import log, metric
@@ -37,6 +37,12 @@ def _client_error_code(e: Exception) -> str:
     return type(e).__name__
 
 
+# Cognito errors that mean "try again later" (daily email quota or API throttling).
+_EMAIL_LIMIT_CODES = frozenset(
+    {"LimitExceededException", "TooManyRequestsException", "CodeDeliveryFailureException"}
+)
+
+
 class PortalService:
     def __init__(
         self,
@@ -47,9 +53,11 @@ class PortalService:
         new_operation_id: Callable[[], str] = lambda: uuid.uuid4().hex,
         costs: CostReporter | None = None,
         models: ModelCatalog | None = None,
+        idp: Any | None = None,
     ) -> None:
         self._costs = costs
         self._models = models
+        self._idp = idp  # cognito-idp client; None disables admin invitations
         self._s = settings
         self._repo = repo
         self._issuer = issuer
@@ -550,3 +558,49 @@ class PortalService:
         self._repo.set_issuance_enabled(enabled, now_iso)
         log("INFO", "admin_set_issuance", actor=actor, enabled=enabled)
         return {"issuanceEnabled": enabled}
+
+    def admin_invite_user(
+        self, identity: Identity, email: str, *, resend: bool = False
+    ) -> dict[str, Any]:
+        """Register a participant in the user pool (AdminCreateUser). Cognito emails the
+        temporary password, so only the address owner can complete the sign-in. The address
+        must be on an allowed domain; the Pre sign-up trigger checks it again."""
+        actor = self._require_admin(identity)
+        if self._idp is None or not self._s.user_pool_id:
+            raise ApiError(503, "INVITE_NOT_AVAILABLE")
+        try:
+            email = normalize_email(email)
+        except InvalidEmail:
+            raise ApiError(400, "INVALID_EMAIL") from None
+        if not is_allowed_email(email, self._s.allowed_domains):
+            raise ApiError(400, "DOMAIN_NOT_ALLOWED")
+        params: dict[str, Any] = {
+            "UserPoolId": self._s.user_pool_id,
+            "Username": email,
+            "UserAttributes": [
+                {"Name": "email", "Value": email},
+                {"Name": "email_verified", "Value": "true"},
+            ],
+            "DesiredDeliveryMediums": ["EMAIL"],
+        }
+        if resend:
+            params["MessageAction"] = "RESEND"
+        try:
+            self._idp.admin_create_user(**params)
+        except ClientError as e:
+            code = _client_error_code(e)
+            log("WARN", "admin_invite_failed", actor=actor, code=code, resend=resend)
+            if code == "UsernameExistsException":
+                raise ApiError(409, "USER_EXISTS") from None
+            if code == "UserNotFoundException":
+                raise ApiError(404, "USER_NOT_FOUND") from None
+            if code == "UnsupportedUserStateException":
+                raise ApiError(409, "USER_ALREADY_CONFIRMED") from None
+            if code in _EMAIL_LIMIT_CODES:
+                raise ApiError(429, "EMAIL_LIMIT") from None
+            if code == "UserLambdaValidationException":
+                raise ApiError(400, "DOMAIN_NOT_ALLOWED") from None
+            raise ApiError(502, "AWS_API_ERROR") from None
+        # The address itself is not logged (PII); the domain is enough for auditing.
+        log("INFO", "admin_invite", actor=actor, domain=email.split("@", 1)[1], resend=resend)
+        return {"email": email, "resent": resend}

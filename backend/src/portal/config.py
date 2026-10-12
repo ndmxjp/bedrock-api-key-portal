@@ -31,6 +31,7 @@ class Settings:
     permissions_boundary_arn: str
     user_pool_client_id: str
     token_issuer: str
+    user_pool_id: str = ""  # empty: admin invitations are disabled
     allowed_models: tuple[str, ...] = ()
     issue_cooldown_seconds: int = 10
     issuing_lease_seconds: int = 90
@@ -64,6 +65,7 @@ class Settings:
             permissions_boundary_arn=env["PERMISSIONS_BOUNDARY_ARN"],
             user_pool_client_id=env["USER_POOL_CLIENT_ID"],
             token_issuer=env["TOKEN_ISSUER"],
+            user_pool_id=env.get("USER_POOL_ID", ""),
             allowed_models=tuple(json.loads(env.get("ALLOWED_MODELS", "[]"))),
             issue_cooldown_seconds=int(env.get("ISSUE_COOLDOWN_SECONDS", "10")),
             issuing_lease_seconds=int(env.get("ISSUING_LEASE_SECONDS", "90")),

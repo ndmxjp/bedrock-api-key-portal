@@ -102,7 +102,7 @@ describe("Cognito", () => {
 describe("API", () => {
   it("every route requires the JWT authorizer", () => {
     const routes = template.findResources("AWS::ApiGatewayV2::Route");
-    expect(Object.keys(routes)).toHaveLength(13);
+    expect(Object.keys(routes)).toHaveLength(14);
     for (const r of Object.values(routes) as any[]) {
       expect(r.Properties.AuthorizationType).toBe("JWT");
     }
@@ -113,6 +113,7 @@ describe("API", () => {
       expect.arrayContaining([
         "GET /api/admin/overview",
         "GET /api/admin/users",
+        "POST /api/admin/users",
         "POST /api/admin/users/{sub}/revoke",
         "POST /api/admin/users/{sub}/release-slot",
         "PUT /api/admin/issuance",
@@ -127,10 +128,25 @@ describe("API", () => {
   it("creates the admin group", () => {
     template.hasResourceProperties("AWS::Cognito::UserPoolGroup", { GroupName: "PortalAdmins" });
   });
-  it("throttles key issuance", () => {
+  it("throttles key issuance and invitations", () => {
     template.hasResourceProperties("AWS::ApiGatewayV2::Stage", {
-      RouteSettings: Match.objectLike({ "POST /api/keys": { ThrottlingBurstLimit: 5, ThrottlingRateLimit: 1 } }),
+      RouteSettings: Match.objectLike({
+        "POST /api/keys": { ThrottlingBurstLimit: 5, ThrottlingRateLimit: 1 },
+        "POST /api/admin/users": { ThrottlingBurstLimit: 5, ThrottlingRateLimit: 1 },
+      }),
     });
+  });
+  it("lets the API invite users into the pool and nothing else in Cognito", () => {
+    const cognito = rolePolicyStatements(template, "ApiFnServiceRole").filter((s) =>
+      [s.Action].flat().some((a: string) => a.startsWith("cognito-idp:")),
+    );
+    expect(cognito).toHaveLength(1);
+    expect([cognito[0].Action].flat()).toEqual(["cognito-idp:AdminCreateUser"]);
+    expect(JSON.stringify(cognito[0].Resource)).toMatch(/UserPool.*Arn/);
+    const apiFn = Object.values(template.findResources("AWS::Lambda::Function")).find(
+      (f: any) => f.Properties.Handler === "portal.handler.handler",
+    ) as any;
+    expect(apiFn.Properties.Environment.Variables.USER_POOL_ID).toBeDefined();
   });
   it("stage is created after the routes it throttles", () => {
     const [stage] = Object.values(template.findResources("AWS::ApiGatewayV2::Stage")) as any[];

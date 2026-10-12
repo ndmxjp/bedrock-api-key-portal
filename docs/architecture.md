@@ -7,7 +7,7 @@
 | CloudFront | SPA（S3, OAC）と `/api/*`（HTTP API）を同一オリジンで配信。CSP 等のセキュリティヘッダーを付与 |
 | Cognito User Pool | Lite プラン。パスワード認証（SRP）。メールは Cognito 既定の送信機能（SES 不使用）。許可ドメインのみセルフ登録可（管理者招待も可）。Pre sign-up トリガーで許可ドメイン外を拒否 |
 | HTTP API | 全ルートで Cognito JWT authorizer（ID トークン、aud = アプリクライアント）。ルート別スロットリング |
-| API Lambda | `GET /api/me`, `POST /api/keys`, `POST /api/keys/revoke`、管理者向け `/api/admin/*`（概要、利用者一覧、強制失効、枠解放、キルスイッチ）。IAM 操作と DynamoDB 状態管理 |
+| API Lambda | `GET /api/me`, `POST /api/keys`, `POST /api/keys/revoke`、管理者向け `/api/admin/*`（概要、利用者一覧、利用者の招待、強制失効、枠解放、キルスイッチ）。IAM 操作と DynamoDB 状態管理 |
 | DynamoDB | 単一テーブル。利用者ごとの状態、発行枠カウンタ、キルスイッチ |
 | IAM | 利用者ごとの IAM ユーザー（`/bedrock-poc/poc-bedrock-<hash>`）と Bedrock API キー |
 | 顧客管理ポリシー `BedrockPoCUserPolicy` | 利用者に付与する Bedrock 権限。同じポリシーを Permissions Boundary にも設定 |
@@ -17,7 +17,7 @@
 ## 認証フロー
 
 1. セルフ登録: `SignUp`（メール＋パスワード）→ Pre sign-up トリガーがドメインを完全一致で検査 → メールの確認コードで `ConfirmSignUp`（`email_verified=true`）→ 自動サインイン
-2. 管理者招待: `scripts/invite_users.py`（`AdminCreateUser`）→ 初期パスワード付き招待メール。初期パスワードを受け取れることがメール所有の証明
+2. 管理者招待: 管理画面の「利用者を追加」（`POST /api/admin/users`）または `scripts/invite_users.py`。どちらも `AdminCreateUser`（`email_verified=true`）→ 初期パスワード付き招待メール。初期パスワードを受け取れることがメール所有の証明
 3. 参加者は SRP（`USER_SRP_AUTH`）でログインし、初回は `NEW_PASSWORD_REQUIRED` で自分のパスワードを設定する。忘れた場合は `ForgotPassword` → メールのコードで再設定
 4. ユーザー存在エラーの防止が有効なので、未登録と誤パスワードは画面上区別しない
 5. SPA は ID トークンを `Authorization: Bearer` で `/api/*` に送る。トークンは sessionStorage に保存（タブを閉じると消える）

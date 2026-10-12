@@ -140,7 +140,8 @@ export class PortalStack extends Stack {
       featurePlan: cognito.FeaturePlan.LITE,
       // Self sign-up is open, but the Pre sign-up trigger rejects any email outside
       // allowedDomains, and the API re-checks the domain. Admins can also invite users
-      // (scripts/invite_users.py). NOTE: account security automation may disable self sign-up.
+      // (admin screen or scripts/invite_users.py). NOTE: account security automation may
+      // disable self sign-up.
       selfSignUpEnabled: true,
       signInAliases: { email: true },
       signInCaseSensitive: false,
@@ -235,6 +236,7 @@ export class PortalStack extends Stack {
         USER_POLICY_ARN: userPolicy.managedPolicyArn,
         PERMISSIONS_BOUNDARY_ARN: userPolicy.managedPolicyArn,
         USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
+        USER_POOL_ID: userPool.userPoolId,
         TOKEN_ISSUER: tokenIssuer,
         ALLOWED_MODELS: JSON.stringify(config.inferenceProfiles.map((p) => p.id)),
         MODEL_MODE: config.allowAllModels ? "all" : "list",
@@ -265,6 +267,15 @@ export class PortalStack extends Stack {
       }),
     );
     this.grantIssuerPermissions(apiFn, userPolicy.managedPolicyArn, config.maxCredentialAgeDays);
+    // Admins invite participants from the portal (POST /api/admin/users). AdminCreateUser only:
+    // the API never sets passwords, confirms users or changes group membership.
+    apiFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: "InviteParticipants",
+        actions: ["cognito-idp:AdminCreateUser"],
+        resources: [userPool.userPoolArn],
+      }),
+    );
 
     // ---------------------------------------------------------------- HTTP API
     const httpApi = new apigwv2.HttpApi(this, "HttpApi", {
@@ -285,6 +296,7 @@ export class PortalStack extends Stack {
       ["/api/keys/revoke", apigwv2.HttpMethod.POST],
       ["/api/admin/overview", apigwv2.HttpMethod.GET],
       ["/api/admin/users", apigwv2.HttpMethod.GET],
+      ["/api/admin/users", apigwv2.HttpMethod.POST],
       ["/api/admin/users/{sub}/revoke", apigwv2.HttpMethod.POST],
       ["/api/admin/users/{sub}/release-slot", apigwv2.HttpMethod.POST],
       ["/api/admin/issuance", apigwv2.HttpMethod.PUT],
@@ -322,6 +334,8 @@ export class PortalStack extends Stack {
     stage.addPropertyOverride("RouteSettings", {
       "POST /api/keys": { ThrottlingBurstLimit: 5, ThrottlingRateLimit: 1 },
       "POST /api/keys/revoke": { ThrottlingBurstLimit: 5, ThrottlingRateLimit: 2 },
+      // Each invitation sends an email from the pool's limited daily quota.
+      "POST /api/admin/users": { ThrottlingBurstLimit: 5, ThrottlingRateLimit: 1 },
     });
 
     // ---------------------------------------------------------------- Frontend hosting

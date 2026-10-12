@@ -415,6 +415,14 @@ details[open] .model-toggle::after { content: " ▴"; }
 .check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; width: 100%; }
 .check input { accent-color: var(--primary); width: 14px; height: 14px; margin: 0; }
 
+/* ---------------------------------------------------------------- admin: invite */
+
+.invite-form { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; padding: 16px 22px; }
+.invite-form .field { flex: 1 1 260px; }
+.invite-form .check { width: auto; height: 40px; }
+.invite-form .btn { flex: none; }
+.invite-form .invite-error { flex-basis: 100%; }
+
 /* ---------------------------------------------------------------- admin: table */
 
 .table-scroll { overflow-x: auto; }

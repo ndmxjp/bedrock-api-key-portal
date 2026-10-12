@@ -145,3 +145,6 @@ export const adminSetRegistrationCap = (cap: number) =>
   call<{ registrationCap: number; reservedSlots: number }>("PUT", "/api/admin/registration-cap", { cap });
 export const adminSetCredentialAge = (days: number | null) =>
   call<{ credentialAgeDays: number | null }>("PUT", "/api/admin/credential-age", { days });
+/** Register a participant (Cognito emails a temporary password). resend: new temporary password. */
+export const adminInviteUser = (email: string, resend = false) =>
+  call<{ email: string; resent: boolean }>("POST", "/api/admin/users", { email, resend });

@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   adminResume: vi.fn(),
   adminSetRegistrationCap: vi.fn(),
   adminSetCredentialAge: vi.fn(),
+  adminInviteUser: vi.fn(),
 }));
 vi.mock("./api", async (orig) => ({ ...(await orig<typeof import("./api")>()), ...api }));
 vi.mock("./auth", () => ({ getIdToken: vi.fn(async () => "token") }));
@@ -177,6 +178,46 @@ describe("AdminView", () => {
     await u.click(screen.getAllByRole("button", { name: "保存" })[0]);
     expect(api.adminSetCredentialAge).not.toHaveBeenCalled();
     expect(screen.getByText("有効期限は 1〜30 日の整数で指定してください。")).toBeTruthy();
+  });
+
+  it("invites a participant on an allowed domain", async () => {
+    api.adminInviteUser.mockResolvedValueOnce({ email: "carol@example.com", resent: false });
+    const u = userEvent.setup();
+    render(<AdminView onAuthExpired={() => undefined} />);
+    const input = await screen.findByLabelText("招待するメールアドレス");
+    expect(screen.getByRole("button", { name: "招待メールを送る" })).toHaveProperty("disabled", true);
+    await u.type(input, " Carol@Example.com ");
+    await u.click(screen.getByRole("button", { name: "招待メールを送る" }));
+    expect(api.adminInviteUser).toHaveBeenCalledWith("carol@example.com", false);
+    expect(await screen.findByText(/carol@example.com に招待メールを送りました/)).toBeTruthy();
+    expect(input).toHaveProperty("value", "");
+    expect(window.confirm).not.toHaveBeenCalled();
+  });
+
+  it("blocks other domains client-side and re-sends when asked", async () => {
+    api.adminInviteUser.mockResolvedValueOnce({ email: "dan@example.com", resent: true });
+    const u = userEvent.setup();
+    render(<AdminView onAuthExpired={() => undefined} />);
+    const input = await screen.findByLabelText("招待するメールアドレス");
+    await u.type(input, "mallory@evil-example.com");
+    expect(screen.getByRole("alert").textContent).toMatch("@example.com 以外のメールアドレスは登録できません");
+    expect(screen.getByRole("button", { name: "招待メールを送る" })).toHaveProperty("disabled", true);
+
+    await u.clear(input);
+    await u.type(input, "dan@example.com");
+    await u.click(screen.getByLabelText("招待メールを再送（初期パスワードを再発行）"));
+    await u.click(screen.getByRole("button", { name: "招待メールを再送" }));
+    expect(api.adminInviteUser).toHaveBeenCalledWith("dan@example.com", true);
+    expect(await screen.findByText(/dan@example.com に招待メールを再送しました/)).toBeTruthy();
+  });
+
+  it("shows the server message when the address is already registered", async () => {
+    api.adminInviteUser.mockRejectedValueOnce(new ApiError(409, "USER_EXISTS", "このメールアドレスは既に登録されています。"));
+    const u = userEvent.setup();
+    render(<AdminView onAuthExpired={() => undefined} />);
+    await u.type(await screen.findByLabelText("招待するメールアドレス"), "alice@example.com");
+    await u.click(screen.getByRole("button", { name: "招待メールを送る" }));
+    expect(await screen.findByText("このメールアドレスは既に登録されています。")).toBeTruthy();
   });
 
   it("filters by email", async () => {

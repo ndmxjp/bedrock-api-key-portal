@@ -49,7 +49,8 @@ def build_service(settings: Settings) -> PortalService:
         settings.table_name,
         providers=settings.allowed_providers,
     )
-    return PortalService(settings, repo, issuer, costs=costs, models=models)
+    idp = boto3.client("cognito-idp") if settings.user_pool_id else None
+    return PortalService(settings, repo, issuer, costs=costs, models=models, idp=idp)
 
 
 def _get() -> tuple[Settings, PortalService]:
@@ -154,6 +155,20 @@ def _age_body(event: dict[str, Any]) -> int | None:
     return days
 
 
+def _invite_body(event: dict[str, Any]) -> tuple[str, bool]:
+    """Exactly {"email": <str>} with an optional {"resend": <bool>}."""
+    try:
+        body = json.loads(event.get("body") or "")
+    except ValueError:
+        raise ApiError(400, "INVALID_REQUEST") from None
+    if not isinstance(body, dict) or not {"email"} <= set(body) <= {"email", "resend"}:
+        raise ApiError(400, "INVALID_REQUEST")
+    email, resend = body["email"], body.get("resend", False)
+    if not isinstance(email, str) or len(email) > 254 or not isinstance(resend, bool):
+        raise ApiError(400, "INVALID_REQUEST")
+    return email, resend
+
+
 def route(event: dict[str, Any], settings: Settings, service: PortalService) -> tuple[int, dict]:
     route_key = event.get("routeKey", "")
     identity = identity_from_event(event, settings, int(time.time()))
@@ -169,6 +184,9 @@ def route(event: dict[str, Any], settings: Settings, service: PortalService) -> 
         return 200, service.admin_overview(identity)
     if route_key == "GET /api/admin/users":
         return 200, service.admin_list_users(identity)
+    if route_key == "POST /api/admin/users":
+        email, resend = _invite_body(event)
+        return (200 if resend else 201), service.admin_invite_user(identity, email, resend=resend)
     if route_key == "POST /api/admin/users/{sub}/revoke":
         _reject_unexpected_body(event)
         return 200, service.admin_revoke(identity, _target_sub(event))

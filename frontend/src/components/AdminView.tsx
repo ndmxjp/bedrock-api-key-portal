@@ -4,6 +4,7 @@ import {
   type AdminOverview,
   type AdminUser,
   ApiError,
+  adminInviteUser,
   adminReleaseSlot,
   adminSetCredentialAge,
   adminResume,
@@ -36,6 +37,8 @@ export function AdminView({ onAuthExpired }: { onAuthExpired: () => void }) {
   const [info, setInfo] = useState<string | null>(null);
   const [capDraft, setCapDraft] = useState<string | null>(null);
   const [ageDraft, setAgeDraft] = useState<{ days: string; unlimited: boolean } | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteResend, setInviteResend] = useState(false);
 
   const handleError = useCallback(
     (e: unknown) => {
@@ -105,6 +108,33 @@ export function AdminView({ onAuthExpired }: { onAuthExpired: () => void }) {
       await load();
     } catch (e) {
       handleError(e);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const inviteNormalized = inviteEmail.trim().toLowerCase();
+  const inviteDomain = inviteNormalized.split("@")[1] ?? "";
+  const inviteDomainOk = !overview || overview.allowedDomains.length === 0 || overview.allowedDomains.includes(inviteDomain);
+  const domainLabel = (overview?.allowedDomains ?? []).map((d) => `@${d}`).join(" / ");
+
+  async function invite(e: React.FormEvent) {
+    e.preventDefault();
+    if (!inviteNormalized || !inviteDomainOk) return;
+    setBusy("invite");
+    setError(null);
+    setInfo(null);
+    try {
+      const result = await adminInviteUser(inviteNormalized, inviteResend);
+      setInfo(
+        result.resent
+          ? `${result.email} に招待メールを再送しました（新しい初期パスワード、有効期限 7 日）。`
+          : `${result.email} に招待メールを送りました。初回ログイン時に自分のパスワードを設定してもらってください。`,
+      );
+      setInviteEmail("");
+      setInviteResend(false);
+    } catch (err) {
+      handleError(err);
     } finally {
       setBusy(null);
     }
@@ -313,6 +343,49 @@ export function AdminView({ onAuthExpired }: { onAuthExpired: () => void }) {
             ))}
           </ul>
         </div>
+      </section>
+
+      <section className="card panel" aria-labelledby="invite-title">
+        <div className="panel-head">
+          <h2 id="invite-title">利用者を追加</h2>
+        </div>
+        <form className="invite-form" onSubmit={(e) => void invite(e)}>
+          <label className="field">
+            招待するメールアドレス
+            <input
+              type="email"
+              inputMode="email"
+              autoComplete="off"
+              spellCheck={false}
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder={overview.allowedDomains[0] ? `name@${overview.allowedDomains[0]}` : "name@example.com"}
+              disabled={busy !== null}
+            />
+          </label>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={inviteResend}
+              onChange={(e) => setInviteResend(e.target.checked)}
+              disabled={busy !== null}
+            />
+            招待メールを再送（初期パスワードを再発行）
+          </label>
+          <button type="submit" className="btn primary" disabled={busy !== null || !inviteNormalized || !inviteDomainOk}>
+            {busy === "invite" ? "送信中…" : inviteResend ? "招待メールを再送" : "招待メールを送る"}
+          </button>
+          {inviteNormalized.includes("@") && inviteDomain && !inviteDomainOk && (
+            <p className="field-error invite-error" role="alert">
+              {domainLabel} 以外のメールアドレスは登録できません
+            </p>
+          )}
+        </form>
+        <p className="muted small panel-foot">
+          登録できるのは {domainLabel} のメールアドレスだけです。Cognito から初期パスワード付きの招待メールが届き（有効期限 7 日）、
+          初回ログイン時に本人がパスワードを設定します。招待メールにポータルの URL は入らないので、URL は別途案内してください。
+          招待した人は、キーを発行するまで下の一覧には表示されません。
+        </p>
       </section>
 
       <section className="card panel" aria-labelledby="users-title">
