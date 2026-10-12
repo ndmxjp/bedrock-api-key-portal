@@ -289,6 +289,15 @@ cd .. && make destroy                                                           
 - 想定外のアクセスキーやパスワード等が付いたユーザーは削除せずに報告します
 - `removalPolicy: "destroy"` の場合、DynamoDB テーブル・ユーザープール・S3 バケットはスタックと一緒に削除されます
 
+## CI
+
+GitHub Actions（`.github/workflows/ci.yml`）が push と Pull Request で動きます。AWS 認証情報は使いません。
+
+- backend: ruff（lint / format）、pytest、`requirements.txt` が `uv.lock` と一致しているか
+- frontend: tsc、vitest、本番ビルド
+- infra: tsc、vitest、`infra/ci/portal.config.json` を使った `cdk synth`（Lambda の依存パッケージ同梱まで実行し、成果物が import できるか確認）
+- scripts: 各スクリプトの `--help`
+
 ## 開発
 
 ```bash
