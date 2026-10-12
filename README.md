@@ -4,7 +4,7 @@ A self-service web portal that lets people with an email address on an allowed d
 
 指定ドメインのメールアドレスを持つ PoC 参加者が、ブラウザからメールアドレスとパスワードで認証し、Amazon Bedrock の長期 API キー（IAM service-specific credential）を 1 人 1 つセルフサービスで発行できる Web ポータルです。
 
-- 仕様書: [docs/spec.md](docs/spec.md) ／ 実装計画: [docs/implementation-plan.md](docs/implementation-plan.md)
+- 実装計画: [docs/implementation-plan.md](docs/implementation-plan.md)
 - 設計: [docs/architecture.md](docs/architecture.md) ／ セキュリティ: [docs/security.md](docs/security.md)
 
 > 長期 API キーは探索・検証用途向けです。本番採用時は短期認証情報 / SSO 方式へ見直してください。

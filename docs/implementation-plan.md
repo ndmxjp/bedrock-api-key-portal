@@ -1,6 +1,6 @@
 # 実装計画 — Bedrock API Key Self-Service Portal (PoC)
 
-仕様: [spec.md](spec.md)。本書は実装順序・設計判断・検証方法をまとめたもの。
+本書は実装順序・設計判断・検証方法をまとめたもの（元の仕様書は非公開）。
 
 > 実装済み。決定事項: Cognito のパスワード認証（SRP、Lite、Cognito 既定のメール送信、SES 不使用）＋管理者招待制（セルフサインアップが無効化される環境向け）、Python 3.14 / Node 24 LTS / TypeScript 7.0 / CDK 2.273 / React 19.3 / Vite 8.3。テストは各パッケージ配下に配置。
 
