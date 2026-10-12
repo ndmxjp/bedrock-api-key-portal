@@ -7,7 +7,7 @@
 import subprocess, pathlib, tempfile
 OUT = pathlib.Path(__file__).resolve().parents[1] / "images"
 import diagrams
-R = pathlib.Path(diagrams.__file__).parent / "resources/aws"
+R = pathlib.Path(diagrams.__file__).parents[1] / "resources/aws"  # diagrams パッケージ同梱の公式アイコン
 I = {
   "users": R/"general/users.png", "cf": R/"network/cloudfront.png", "s3": R/"storage/simple-storage-service-s3.png",
   "cognito": R/"security/cognito.png", "apigw": R/"network/api-gateway.png", "lambda": R/"compute/lambda.png",
