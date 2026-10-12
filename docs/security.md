@@ -61,6 +61,7 @@
 - `bedrock:CallWithBearerToken`（API キーでの呼び出しに必須。リソース型が無いため `*`）
 - 設定した推論プロファイルへの `bedrock:InvokeModel` / `InvokeModelWithResponseStream`（`aws:RequestedRegion` で Bedrock リージョンに限定）。Converse / ConverseStream もこの 2 つで認可される
 - 基盤モデルは `bedrock:InferenceProfileArn` 条件で**許可したプロファイル経由のときだけ**呼び出せる。リージョン部分を `*` にしているのは、地域/グローバルのクロスリージョン推論のルーティング先をすべて列挙せずに済ませるため。プロファイル経由に限定しているので、他のモデルや直接呼び出しは許可されない
+- `arn:aws:bedrock:<region>:<account>:project/default` への `bedrock:InvokeModel`（`InvokeDefaultProjectForResponsesApi`）。`bedrock-runtime` の OpenAI 互換 Responses API（Codex、OpenAI SDK）は推論対象に加えてアカウントの default project を認可するため。`bedrock:ModelArn` 条件で、上の文と同じ推論プロファイル／基盤モデルに限定する。Converse / InvokeModel / Chat Completions はこの文を使わない。保存済みレスポンスの取得・削除（`bedrock:GetInvoke` 等）と `bedrock-mantle` エンドポイントは許可しない
 - コンソールパスワード・アクセスキーは発行しない
 
 ### キーの有効期限

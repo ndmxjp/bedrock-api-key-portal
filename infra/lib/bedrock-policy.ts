@@ -5,6 +5,28 @@ import type { InferenceProfileConfig } from "./config.js";
 const INVOKE_ACTIONS = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"];
 
 /**
+ * The OpenAI-compatible Responses API on bedrock-runtime (Codex, OpenAI SDK) authorizes
+ * bedrock:InvokeModel on the account's *default project* in addition to the inference target.
+ * bedrock:ModelArn on that authorization carries the profile / model the request named, so the
+ * grant is limited to the same targets as the inference statements. Converse, InvokeModel and
+ * Chat Completions never touch the project.
+ */
+function defaultProjectStatement(
+  regionPart: string,
+  account: string,
+  modelArns: string[],
+  regionCondition?: Record<string, Record<string, string>>,
+): PolicyStatementProps {
+  return {
+    sid: "InvokeDefaultProjectForResponsesApi",
+    effect: Effect.ALLOW,
+    actions: INVOKE_ACTIONS,
+    resources: [`arn:aws:bedrock:${regionPart}:${account}:project/default`],
+    conditions: { ArnLike: { "bedrock:ModelArn": modelArns }, ...regionCondition },
+  };
+}
+
+/**
  * Least-privilege statements for PoC users.
  *
  * - The inference profile may be invoked only in the configured Bedrock region.
@@ -14,6 +36,7 @@ const INVOKE_ACTIONS = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseS
  * - bedrock:CallWithBearerToken is required for every call made with a Bedrock API key.
  *   The action has no resource type, so it must use "*".
  * - Converse / ConverseStream are authorized by InvokeModel / InvokeModelWithResponseStream.
+ * - The default-project grant (defaultProjectStatement) covers the Responses API.
  */
 export function bedrockUserStatements(
   profiles: InferenceProfileConfig[],
@@ -29,15 +52,19 @@ export function bedrockUserStatements(
       resources: ["*"],
     },
   ];
+  const regionPart = restrictRegion ? bedrockRegion : "*";
+  const regionCondition = restrictRegion ? { StringEquals: { "aws:RequestedRegion": bedrockRegion } } : undefined;
+  const targets: string[] = [];
   profiles.forEach((p, i) => {
-    const profileArn = `arn:aws:bedrock:${restrictRegion ? bedrockRegion : "*"}:${account}:inference-profile/${p.id}`;
+    const profileArn = `arn:aws:bedrock:${regionPart}:${account}:inference-profile/${p.id}`;
+    targets.push(profileArn, `arn:aws:bedrock:${regionPart}::foundation-model/${p.modelId}`);
     statements.push(
       {
         sid: `InvokeProfile${i}`,
         effect: Effect.ALLOW,
         actions: INVOKE_ACTIONS,
         resources: [profileArn],
-        conditions: restrictRegion ? { StringEquals: { "aws:RequestedRegion": bedrockRegion } } : undefined,
+        conditions: regionCondition,
       },
       {
         sid: `InvokeModelViaProfile${i}`,
@@ -51,6 +78,7 @@ export function bedrockUserStatements(
       },
     );
   });
+  if (targets.length) statements.push(defaultProjectStatement(regionPart, account, targets, regionCondition));
   return statements;
 }
 
@@ -106,6 +134,7 @@ export function allModelsStatements(
       resources: models(regionPart),
       conditions: regionCondition,
     },
+    defaultProjectStatement(regionPart, account, [...profiles, ...models(regionPart)], regionCondition),
   ];
 }
 

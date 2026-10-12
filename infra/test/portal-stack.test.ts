@@ -208,6 +208,15 @@ describe("Bedrock user policy", () => {
       }
     }
   });
+  it("lets the Responses API use the default project only for the configured profile", () => {
+    const project = statements.find((s) => s.Sid === "InvokeDefaultProjectForResponsesApi");
+    expect([project.Resource].flat()).toEqual(["arn:aws:bedrock:us-west-2:123456789012:project/default"]);
+    expect(project.Condition.ArnLike["bedrock:ModelArn"]).toEqual([
+      "arn:aws:bedrock:us-west-2:123456789012:inference-profile/us.example.model-v1:0",
+      "arn:aws:bedrock:us-west-2::foundation-model/example.model-v1:0",
+    ]);
+    expect(project.Condition.StringEquals).toEqual({ "aws:RequestedRegion": "us-west-2" });
+  });
 });
 
 describe("hosting & ops", () => {
@@ -259,6 +268,12 @@ describe("allowAllModels", () => {
     );
     const direct = stmts.find((s) => s.Sid === "InvokeModelsDirectInRegion");
     expect([direct.Resource].flat()).toEqual(["arn:aws:bedrock:us-west-2::foundation-model/*"]);
+    const project = stmts.find((s) => s.Sid === "InvokeDefaultProjectForResponsesApi");
+    expect([project.Resource].flat()).toEqual(["arn:aws:bedrock:us-west-2:123456789012:project/default"]);
+    expect(project.Condition.ArnLike["bedrock:ModelArn"]).toEqual([
+      "arn:aws:bedrock:us-west-2:123456789012:inference-profile/*",
+      "arn:aws:bedrock:us-west-2::foundation-model/*",
+    ]);
   });
   it("still grants only inference actions (no management, no Marketplace)", () => {
     for (const s of stmts) {

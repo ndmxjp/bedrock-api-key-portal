@@ -356,7 +356,7 @@ cd frontend && VITE_API_PROXY=https://<PortalUrl> npm run dev
 - `POST /api/keys/rotate` は未実装。失効 → 再発行で代替します
 - WAF は未導入（費用のため）。API Gateway のスロットリング、ユーザー単位のクールダウン、Cognito 側の保護で連打を抑えます
 - 実 AWS へのデプロイと E2E 検証は未実施です（利用者の認証情報が必要なため）
-- Bedrock の OpenAI 互換 API（Responses API 等）は別のアクション/エンドポイントを使う可能性があり、本ポリシーでは検証していません。Converse / InvokeModel 系を対象にしています
+- Bedrock の OpenAI 互換 API のうち、`bedrock-runtime` の Chat Completions / Responses API は利用者ポリシーで許可しています（Responses API が要求する default project への `bedrock:InvokeModel` を含む）。`bedrock-mantle` エンドポイント（`bedrock-mantle:CreateInference`）は許可していません
 - メールドメインの確認は在籍の保証ではありません。人数上限と利用ルールで補います
 
 ## Future Work
