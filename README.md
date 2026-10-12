@@ -55,46 +55,7 @@ A self-service web portal that lets people with an email address on an allowed d
 
 ## アーキテクチャ
 
-```mermaid
-flowchart LR
-  subgraph Client[利用者]
-    U[ブラウザ / SPA]
-  end
-
-  subgraph Edge[配信・認証]
-    CF[CloudFront<br/>同一オリジン・CSP・任意で IP 制限]
-    S3[(S3<br/>SPA + フォント)]
-    C[Cognito User Pool<br/>パスワード認証・許可ドメインのみ]
-  end
-
-  subgraph API[API]
-    GW[HTTP API<br/>JWT authorizer]
-    L[Lambda<br/>発行・失効・管理 API]
-    D[(DynamoDB<br/>状態・枠・設定・キャッシュ)]
-  end
-
-  subgraph AWS[AWS アカウント内]
-    I[IAM<br/>利用者ごとのユーザー +<br/>Bedrock API キー]
-    P[顧客管理ポリシー<br/>= Permissions Boundary]
-    CE[Cost Explorer<br/>利用者別の利用料]
-    AG[デプロイ時: モデル利用規約へ自動同意]
-  end
-
-  B[Amazon Bedrock<br/>許可した提供元のモデル]
-
-  U -->|HTTPS| CF
-  CF -->|/*| S3
-  CF -->|/api/* + X-Origin-Verify| GW
-  U <-->|サインイン / トークン| C
-  GW -->|claims| L
-  L <--> D
-  L -->|CreateUser / CreateServiceSpecificCredential| I
-  I -. attach / boundary .- P
-  L -->|GetCostAndUsage| CE
-  AG -.-> B
-  U ==>|発行した API キーで直接呼び出し| B
-  I -. 権限 .-> B
-```
+![アーキテクチャ](docs/images/architecture.png)
 
 **要点**
 
