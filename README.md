@@ -34,18 +34,101 @@ A self-service web portal that lets people with an email address on an allowed d
 
 **Amplify Hosting ではなく S3 + CloudFront を選んだ理由:** 同じ CloudFront ドメインで `/api/*` を API Gateway に振り分けられ、API を同一オリジンにできる（CORS 不要）ためです。CSP などのセキュリティヘッダーも CDK で一元管理できます。
 
+## 画面
+
+| ログイン | API キー（利用者） |
+| --- | --- |
+| ![ログイン画面](docs/images/login.png) | ![APIキー画面](docs/images/api-key.png) |
+
+| キー発行完了（一度きりの表示） | 管理画面 |
+| --- | --- |
+| ![キー発行完了画面](docs/images/key-issued.png) | ![管理画面](docs/images/admin.png) |
+
+<details>
+<summary>スマホ表示</summary>
+
+<img src="docs/images/mobile.png" alt="スマホ表示" width="390">
+
+</details>
+
+スクリーンショットはダミーデータで表示したものです（キーの値も実在しません）。
+
+## アーキテクチャ
+
 ```mermaid
-flowchart TD
-  U[PoC参加者のブラウザ] --> CF[CloudFront]
-  CF -->|/*| S3[(S3 / SPA)]
-  CF -->|/api/*| A[API Gateway HTTP API]
-  U --> C[Cognito User Pool / パスワード]
-  A --> J[JWT Authorizer]
-  J --> L[Lambda]
-  L --> D[(DynamoDB)]
-  L --> I[IAM / ユーザー + Bedrock APIキー]
-  I --> B[Amazon Bedrock / 許可モデルのみ]
+flowchart LR
+  subgraph Client[利用者]
+    U[ブラウザ / SPA]
+  end
+
+  subgraph Edge[配信・認証]
+    CF[CloudFront<br/>同一オリジン・CSP・任意で IP 制限]
+    S3[(S3<br/>SPA + フォント)]
+    C[Cognito User Pool<br/>パスワード認証・許可ドメインのみ]
+  end
+
+  subgraph API[API]
+    GW[HTTP API<br/>JWT authorizer]
+    L[Lambda<br/>発行・失効・管理 API]
+    D[(DynamoDB<br/>状態・枠・設定・キャッシュ)]
+  end
+
+  subgraph AWS[AWS アカウント内]
+    I[IAM<br/>利用者ごとのユーザー +<br/>Bedrock API キー]
+    P[顧客管理ポリシー<br/>= Permissions Boundary]
+    CE[Cost Explorer<br/>利用者別の利用料]
+    AG[デプロイ時: モデル利用規約へ自動同意]
+  end
+
+  B[Amazon Bedrock<br/>許可した提供元のモデル]
+
+  U -->|HTTPS| CF
+  CF -->|/*| S3
+  CF -->|/api/* + X-Origin-Verify| GW
+  U <-->|サインイン / トークン| C
+  GW -->|claims| L
+  L <--> D
+  L -->|CreateUser / CreateServiceSpecificCredential| I
+  I -. attach / boundary .- P
+  L -->|GetCostAndUsage| CE
+  AG -.-> B
+  U ==>|発行した API キーで直接呼び出し| B
+  I -. 権限 .-> B
 ```
+
+**要点**
+
+- **キーは Bedrock 本物の API キー。** 利用者は発行後、ポータルを経由せず Bedrock を直接呼びます。ポータルはキーを保存せず、発行直後の一度だけ表示します。
+- **DynamoDB は索引、IAM が真実の情報源。** キーの有効・失効・期限切れは IAM と突き合わせて反映します。
+- **二重発行と人数上限は 1 回のトランザクションで判定。** 連打や並列リクエストでも超過しません。
+- **権限は IAM で絞る。** 利用者のポリシーは推論アクションと許可した提供元に限定し、同じポリシーを Permissions Boundary にも使います。発行 Lambda は IAM 条件キーで Bedrock 用・上限日数以下のキーしか作れません。
+
+**発行フロー**
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as 利用者
+  participant L as Lambda
+  participant D as DynamoDB
+  participant I as IAM
+  U->>L: POST /api/keys（ID トークン）
+  L->>L: claims・ドメイン・キルスイッチを検証
+  L->>D: TransactWrite: USER→ISSUING（リース 90 秒）+ 枠カウンタ +1（上限条件付き）
+  alt 条件不成立
+    D-->>L: Cancelled
+    L-->>U: 409 ALREADY_ISSUED / ISSUING, 403 CAP, 429
+  end
+  L->>I: GetUser / CreateUser（Path・タグ・Boundary）, AttachUserPolicy
+  L->>I: 古い Bedrock キーを削除
+  L->>I: CreateServiceSpecificCredential（bedrock, 日数 or 無期限）
+  L->>D: USER→ACTIVE（operationId 条件付き）
+  alt 記録失敗
+    L->>I: 作成したキーを削除（ロールバック）
+  end
+  L-->>U: 201 { apiKey（この 1 回だけ）, expiresAt, ... }
+```
+
 
 ## 前提
 
