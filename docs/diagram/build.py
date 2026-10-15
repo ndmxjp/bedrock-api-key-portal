@@ -1,22 +1,21 @@
 """README 用アーキテクチャ図を公式 AWS アイコンで描く（Graphviz neato、座標は手置き）。
 
-    python3 -m venv .venv && .venv/bin/pip install diagrams   # アイコン取得のため
     brew install graphviz
-    .venv/bin/python docs/diagram/build.py                    # docs/images/architecture.png を更新
+    python3 docs/diagram/build.py       # docs/images/architecture.png を更新
+
+アイコンは docs/diagram/icons/ に同梱（AWS Architecture Icons 2026-01-30 版の PowerPoint デッキから
+SVG を 512px PNG に変換）。リソースアイコンがあるものは優先して使う:
+S3=General purpose bucket, API Gateway=Endpoint, Lambda=Lambda function, DynamoDB=Table,
+キー=Long-term security credential, ポリシー=Permissions, CloudWatch=Alarm。
+CloudFront と IAM ユーザーは分かりやすさ優先でサービスアイコン。Cognito / Cost Explorer / Budgets /
+Bedrock はリソースアイコンが無いためサービスアイコン。Marketplace だけはデッキに EMF しかないため従来の PNG。
 """
 import subprocess, pathlib, tempfile
 OUT = pathlib.Path(__file__).resolve().parents[1] / "images"
-import diagrams
-R = pathlib.Path(diagrams.__file__).parents[1] / "resources/aws"  # diagrams パッケージ同梱の公式アイコン
-I = {
-  "users": R/"general/users.png", "cf": R/"network/cloudfront.png", "s3": R/"storage/simple-storage-service-s3.png",
-  "cognito": R/"security/cognito.png", "apigw": R/"network/api-gateway.png", "lambda": R/"compute/lambda.png",
-  "ddb": R/"database/dynamodb.png", "iam": R/"security/identity-and-access-management-iam.png",
-  "key": R/"security/identity-and-access-management-iam-long-term-security-credential.png",
-  "policy": R/"security/identity-and-access-management-iam-permissions.png", "ce": R/"cost/cost-explorer.png",
-  "cw": R/"management/cloudwatch.png", "budgets": R/"cost/budgets.png", "mp": R/"general/marketplace.png",
-  "bedrock": R/"ml/bedrock.png",
-}
+R = pathlib.Path(__file__).resolve().parent / "icons"
+I = {k: R / f"{k}.png" for k in [
+  "users", "cf", "s3", "cognito", "apigw", "lambda", "ddb", "iam", "key", "policy", "ce", "cw", "budgets", "mp", "bedrock",
+]}
 for p in I.values(): assert p.exists(), p
 FONT = "Hiragino Sans"
 PT = 72
