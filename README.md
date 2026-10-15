@@ -1,6 +1,8 @@
 # Bedrock API Key Self-Service Portal (PoC)
 
-A self-service web portal that lets people with an email address on an allowed domain sign up, sign in, and issue their own long-term [Amazon Bedrock API key](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html) (an IAM service-specific credential), one key per person. Built with React, AWS CDK, Cognito, API Gateway, Lambda (Python) and DynamoDB. Admins get a dashboard for caps, key validity, suspend/revoke and per-user Bedrock spend. Documentation is in Japanese. Licensed under the [MIT License](LICENSE).
+[![CI](https://github.com/ndmxjp/bedrock-api-key-portal/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ndmxjp/bedrock-api-key-portal/actions/workflows/ci.yml)
+
+[English](README.en.md) | 日本語
 
 指定ドメインのメールアドレスを持つ PoC 参加者が、ブラウザからメールアドレスとパスワードで認証し、Amazon Bedrock の長期 API キー（IAM service-specific credential）を 1 人 1 つセルフサービスで発行できる Web ポータルです。
 
@@ -151,6 +153,8 @@ make deploy                     # スタック名を変えた場合は STACK=<st
 
 出力の `PortalUrl` がポータルの URL です。`UserPoolId` と `TableName` は運用スクリプトで使います。
 
+シェルに `AWS_REGION` が設定されていると、CDK CLI は `CDK_DEFAULT_REGION` よりそちらを優先します。両方を同じリージョンにしてください。
+
 ### 4. 参加者の登録
 
 許可ドメイン（例 `@example.com`）のアドレスなら、ポータルの「新規登録」から自分で登録できます。メールに届く確認コードで所有を確認します。他ドメインは Pre sign-up トリガーで拒否され、API でも再検証します。
@@ -195,6 +199,15 @@ unset AWS_BEARER_TOKEN_BEDROCK
 
 IAM は結果整合性のため、発行直後は数十秒ほど推論が失敗することがあります。
 
+## 発行したキーで Bedrock を呼ぶ
+
+| 用途 | エンドポイント |
+| --- | --- |
+| Bedrock ネイティブ API（Converse / InvokeModel、SDK 既定） | `https://bedrock-runtime.<region>.amazonaws.com` |
+| OpenAI 互換の Chat Completions / Responses API（Codex、OpenAI SDK） | `https://bedrock-runtime.<region>.amazonaws.com/openai/v1` |
+
+認証は `Authorization: Bearer <APIキー>`、または環境変数 `AWS_BEARER_TOKEN_BEDROCK` です。`bedrock-mantle` エンドポイントはポリシーで許可していません。
+
 ## SES で送信する（オプション）
 
 Cognito のメールを Amazon SES 経由にすると、1 日 50 通の上限がなくなります（SES の本番アクセス承認後は 1 日 5 万通から）。設定ファイルに `ses` を追加して再デプロイします。省略時は Cognito 組み込みの送信のままです。
@@ -219,7 +232,7 @@ Cognito のメールを Amazon SES 経由にすると、1 日 50 通の上限が
 "ses": { "fromEmail": "no-reply@example.com", "fromName": "Bedrock PoC Portal", "verifiedDomain": "example.com" }
 ```
 
-SES コンソールでドメイン（またはアドレス）を検証済みであることが前提です。`sesRegion` でアプリと別リージョンの ID も指定できます。
+SES コンソールでドメイン（またはアドレス）を検証済みであることが前提です。ドメインの DNS が Route 53 以外でも使えます。SES が示す DKIM のレコードを DNS 事業者に登録してください。`sesRegion` でアプリと別リージョンの ID も指定できます。
 
 **共通:** SES のサンドボックスでは検証済みの宛先にしか送れないため、本番アクセスの申請が必要です。費用は送信量に応じた SES の料金です。
 
@@ -356,7 +369,6 @@ cd frontend && VITE_API_PROXY=https://<PortalUrl> npm run dev
 
 - `POST /api/keys/rotate` は未実装。失効 → 再発行で代替します
 - WAF は未導入（費用のため）。API Gateway のスロットリング、ユーザー単位のクールダウン、Cognito 側の保護で連打を抑えます
-- 実 AWS へのデプロイと E2E 検証は未実施です（利用者の認証情報が必要なため）
 - Bedrock の OpenAI 互換 API のうち、`bedrock-runtime` の Chat Completions / Responses API は利用者ポリシーで許可しています（Responses API が要求する default project への `bedrock:InvokeModel` を含む）。`bedrock-mantle` エンドポイント（`bedrock-mantle:CreateInference`）は許可していません
 - メールドメインの確認は在籍の保証ではありません。人数上限と利用ルールで補います
 
